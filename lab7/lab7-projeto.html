@@ -1,0 +1,447 @@
+<!--
+	THIS EXAMPLE WAS DOWNLOADED FROM https://echarts.apache.org/examples/en/editor.html?c=geo-choropleth-scatter
+-->
+<!DOCTYPE html>
+<html lang="en" style="height: 100%">
+<head>
+  <meta charset="utf-8">
+</head>
+<body style="height: 100%; margin: 0">
+  <div id="dropdown-menu" style="float: right; margin-top: 0%; margin-right: 6.5%; position: relative; z-index: 100000;"><select id="kindMenu" onchange="updateAll(kind=this.value, year=currentYear)">
+      <option value="EXP">Exportações</option>
+      <option value="IMP">Importações</option>
+      <option value="BAL">Balança comercial (Exp - Imp)</option>
+    </select></div>
+  <div id="container-map" style="height: 70%; margin-top: 1%;"></div>
+  <div id ="container-chart" style="height: 40%; width: 80%; margin: auto;"></div>
+
+  <script type="text/javascript" src="https://echarts.apache.org/en/js/vendors/jquery@3.7.1/dist/jquery.min.js"></script>
+  <script type="text/javascript" src="https://fastly.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  
+  <!-- Uncomment this line if you want to dataTool extension
+  <script type="text/javascript" src="https://fastly.jsdelivr.net/npm/echarts@5/dist/extension/dataTool.min.js"></script>
+  -->
+  <!-- Uncomment this line if you want to use gl extension
+  <script type="text/javascript" src="https://echarts.apache.org/en/js/vendors/echarts-gl/dist/echarts-gl.min.js"></script>
+  -->
+  <!-- Uncomment this line if you want to echarts-stat extension
+  <script type="text/javascript" src="https://echarts.apache.org/en/js/vendors/echarts-stat/dist/ecStat.min.js"></script>
+  -->
+  <!-- Uncomment this line if you want to echarts-graph-modularity extension
+  <script type="text/javascript" src="https://echarts.apache.org/en/js/vendors/echarts-graph-modularity/dist/echarts-graph-modularity.min.js"></script>
+  -->
+  <!-- Uncomment this line if you want to use map
+  <script type="text/javascript" src="https://fastly.jsdelivr.net/npm/echarts@4.9.0/map/js/world.js"></script>
+  -->
+  <!-- Uncomment these two lines if you want to use bmap extension
+  <script type="text/javascript" src="https://api.map.baidu.com/api?v=3.0&ak=YOUR_API_KEY"></script>
+  <script type="text/javascript" src="https://fastly.jsdelivr.net/npm/echarts@5/dist/extension/bmap.min.js"></script>
+  -->
+
+  <script type="text/javascript">
+    var domMap = document.getElementById('container-map');
+    var mapChart = echarts.init(domMap, null, {
+      renderer: 'canvas',
+      useDirtyRect: false
+    });
+    var app = {};
+    const DATA_PATH = './data/BR-exportacoes_importacoes_2025.json';
+    const GEOJSON_PATH = './data/world.geo.json'
+    var optionWorldmap;
+
+    var currentKind = "EXP";
+    var currentYear = "1997";
+
+    function createUpdateMap(kind = currentKind, year) {
+      $.get(DATA_PATH, function(tradeData) {
+        if(year !== undefined){
+          effectiveYear = year
+          console.log(year);
+        }else{
+          effectiveYear = Math.max(...Object.keys(tradeData["IMP"]).map(strYear => parseInt(strYear))).toString();
+          console.log(effectiveYear);
+        }
+        currentYear = effectiveYear;
+        var selectedData = tradeData[kind][effectiveYear]
+        var transformedData = selectedData.map(item => 
+          {
+            if(item.us_value != null && Number.isFinite(item.us_value)) {
+              return ({name: item.name, value: (item.us_value/1e9).toFixed(2)});
+            }else{
+              return ({name: item.name, value: null})
+            }
+          }
+        );
+
+        var tradeValues = transformedData.map(item => item.value).filter(val => val != null);
+
+        var minVal = Math.min(...tradeValues)
+        var maxVal = Math.max(...tradeValues)
+
+        var title;
+        var colors;
+
+        switch (kind) {
+          case "EXP":
+            title = 'Volume de exportações do Brasil';
+            colors = ['#e6f8d1', '#003900'];
+            break;
+          case "IMP":
+            title = 'Volume de importações do Brasil';
+            colors = ['#ffefef', '#bc0000'];
+            break;
+          case "BAL":
+            title = 'Volume na balança comercial do Brasil'
+            colors = ['#bc0000', '#fffde7', '#003900'];
+            minVal = -maxVal;
+            break;
+          default:
+          title = ''
+          colors = ['#deebf7', '#3182bd']
+        }
+
+        optionWorldmap = {
+          title: {
+            text: title + ` (Ano ${effectiveYear})`,
+            subtext: 'Dados do Monitor do Comércio Exterior Brasileiro',
+            sublink:
+              'https://balanca.economia.gov.br/balanca/IPQ/index.html',
+            left: 'center'
+          },
+          graphic: [
+        {
+            type: 'text',
+            right: 80,
+            top: 135,
+            rotation: 3 * Math.PI / 2,
+            silent: true,
+            style: {
+                text: 'Volume negociado com o país (em bilhões de US$)',
+                font: '13px sans-serif',
+                fill: '#333',
+            }
+        },
+        {
+          type: 'rect',
+          right: 103,
+          top: 490,
+          silent: true,
+          shape: {
+          x: 0,
+          y: 0,
+          width: 18,
+          height: 18,
+        },
+          style: {
+            fill: '#ccc',
+            stroke: 'black'
+          }
+        },
+        {
+            type: 'text',
+            right: 130,
+            top: 494,
+            silent: true,
+            style: {
+                text: 'Países sem dados',
+                font: '11px sans-serif',
+                fill: '#333',
+            }
+        },
+    ],
+          
+          dataset: {
+            source: transformedData
+          },
+          tooltip: {
+            trigger: 'item',
+            formatter: function(params) {
+              let tooltipContent = params.name;
+            if (params.value != null && Number.isFinite(params.value)) {
+                tooltipContent += `<br/><b>US$ ${new Intl.NumberFormat("de-DE").format((params.value).toFixed(2))} bi</b>`;
+            }else{
+              tooltipContent += '<br/>Sem dados';
+            }
+            return tooltipContent;
+            },
+            borderColor: '#808080', // Set the border color to red
+            borderWidth: 1,
+          },
+          visualMap: [
+            {
+              orient: 'vertical',
+              calculable: true,
+              right: 95,
+              top: 100,
+              seriesIndex: 0,
+              itemHeight: 350,
+              itemWidth: 20,
+              // min/max is specified as series.data value extent.
+              min: minVal,
+              max: maxVal,
+              dimension: 1,
+              inRange: {
+                color: colors
+              },
+              outOfRange: {
+                color: '#cccccc'
+              }
+            }
+          ],
+          series: [
+            {
+              // Effectively this is a choropleth map.
+              type: 'map',
+              // Specify geoIndex to share the geo component with the scatter series above,
+              // instead of creating an internal geo coord sys.
+              //geoIndex: 0,
+              map: 'world',
+              itemStyle: {
+                color: '#66c2a5',
+                borderWidth: 1,
+                borderColor: '#808080'
+              },
+              aspectScale: .85
+              
+            }
+          ]
+        };
+        mapChart.setOption(optionWorldmap);
+      })
+}
+function fetchGeoJSON() {
+  mapChart.showLoading();
+  $.get(GEOJSON_PATH, function (geoJSON) {
+    echarts.registerMap('world', geoJSON);
+    createUpdateMap();
+    mapChart.hideLoading();
+  });
+}
+fetchGeoJSON();
+
+    if (optionWorldmap && typeof optionWorldmap === 'object') {
+      mapChart.setOption(optionWorldmap);
+    }
+
+    window.addEventListener('resize', mapChart.resize);
+
+    var dom = document.getElementById('container-chart');
+    var myChart = echarts.init(dom, null, {
+      renderer: 'canvas',
+      useDirtyRect: false
+    });
+    
+    var option;
+
+function createChart(kind = currentKind){
+  $.get(DATA_PATH, function(tradeData) {
+
+
+      const sumAll = function(arr) {
+        var newArr = Object.values(arr).map(item => item.map(info => info.us_value));
+        newArr = newArr.map(vals => vals.filter(Number.isFinite).reduce((acc, curr) => acc + curr, 0));
+        return newArr;
+      }
+
+
+
+
+    option = {
+  title: {
+    text: 'Totais por ano',
+    left: '4%',
+    textStyle: {
+      fontSize: 14
+    },
+  },
+  
+  tooltip: {
+    trigger: 'axis',
+    axisPointer: {
+      type: 'shadow',
+      label: {
+        show: true
+      }
+    },
+    formatter: function (params) {
+        let result = '<b> Ano ' + params[0].name + '</b><br/><br/>';
+
+        params.forEach(function (item) {
+            
+            result += item.marker + ' ' + item.seriesName + ': US$ ' + new Intl.NumberFormat("de-DE").format((item.value/1e9).toFixed(2)) + ' bi<br/>';
+        });
+        return result;
+    }
+  },
+  legend: {
+    data: ['Importações', 'Exportações', 'Balança Comercial']
+  },
+  grid: {
+    left: '3%',
+    right: '4%',
+    bottom: '29%',
+    containLabel: true
+  },
+  toolbox: {
+  },
+  xAxis: {
+    type: 'category',
+    name: 'Série histórica',
+    data: Object.keys(tradeData["IMP"]),
+    nameLocation: 'middle',
+    nameTextStyle: {
+      verticalAlign: 'bottom',
+      padding: [0,0,-35,0],
+      fontSize: 13
+
+    }
+  },
+  yAxis: {
+    type: 'value',
+    name: 'Blhões de US$',
+    axisLabel: {
+            formatter: function (value, index) {
+                return Math.floor(value/1e9);
+            }
+        }
+  },
+  dataZoom: [
+    {
+      show: true,
+      realtime: true,
+      xAxisIndex: [0],
+    },
+  ],
+  series: [
+    {
+      name: 'Exportações',
+      type: 'line',
+      data: sumAll(tradeData["EXP"]),
+      smooth: true,
+      lineStyle: {
+        color: 'rgba(0,57,0,1.0)',
+      },
+      itemStyle: {
+        color: 'rgba(0,57,0,1.0)',
+      },
+      z: 1000
+    },
+    {
+      name: 'Importações',
+      type: 'line',
+      data: sumAll(tradeData["IMP"]),
+      smooth: true,
+      lineStyle: {
+                color: 'rgba(188,0,0,0.3)',
+            },
+      itemStyle: {
+            color: 'rgba(188,0,0,0.3)',
+        },
+    },
+    {
+      name: 'Balança Comercial',
+      type: 'line',
+      data: sumAll(tradeData["BAL"]),
+      smooth: true,
+      lineStyle: {
+        color: 'rgba(0,119,182,0.4)',
+        type: 'dashed'
+      },
+      itemStyle: {
+        color: 'rgba(0,119,182,0.4)'
+      }
+    }
+  ]
+};
+
+    if (option && typeof option === 'object') {
+      myChart.setOption(option);
+    }
+
+  })
+}
+
+createChart();
+    window.addEventListener('resize', myChart.resize);
+
+        myChart.on('mouseover', function(params) {
+          getYear = (params.name).toString();
+          if(getYear != currentYear){
+            currentYear = getYear;
+            console.log(currentYear);
+            createUpdateMap(currentKind, currentYear);
+          }
+          
+});
+
+function updateChart(kind = currentKind) {
+  var colImp;
+  var colExp;
+  var colBal;
+
+  var zImp;
+  var zExp;
+  var zBal;
+
+  switch (kind) {
+          case "EXP":
+            colExp = 'rgba(0,57,0,1.0)';
+            colBal = 'rgba(0,119,182,0.4)';
+            colImp = 'rgba(188,0,0,0.3)';
+            zImp = 0;
+            zBal = 1;
+            zExp = 2;
+            break;
+          case "IMP":
+            colExp = 'rgba(0,57,0,0.3)';
+            colBal = 'rgba(0,119,182,0.4)';
+            colImp = 'rgba(188,0,0,1.0)';
+            zImp = 2;
+            zExp = 1;
+            zBal = 0;
+            break;
+          case "BAL":
+            colExp = 'rgba(0,57,0,0.3)';
+            colBal = 'rgba(0,119,182,1.0)';
+            colImp = 'rgba(188,0,0,0.3)';
+            zBal = 2;
+            zImp = 1;
+            zExp = 0;
+            break;
+        }
+  
+        myChart.setOption({
+          series: [
+            {lineStyle: {
+        color: colExp
+      },
+      itemStyle: {
+        color: colExp
+      }, z: zImp},
+            {lineStyle: {
+        color: colImp
+      },
+      itemStyle: {
+        color: colImp
+      }, z: zExp},
+            {lineStyle: {
+        color: colBal
+      },
+      itemStyle: {
+        color: colBal
+      }, z:zBal}
+          ]
+        })
+
+}
+
+function updateAll(kind = currentKind, year = currentYear){
+  currentKind = kind;
+  currentYear = year;
+  createUpdateMap(currentKind, currentYear);
+  updateChart();
+}
+
+  </script>
+</body>
+</html>
